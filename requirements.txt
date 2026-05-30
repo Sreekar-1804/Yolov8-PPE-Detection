@@ -6,3 +6,7 @@ numpy
 pyyaml
 torch
 torchvision
+streamlit
+streamlit-webrtc
+av
+pillow
