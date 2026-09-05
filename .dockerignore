@@ -1,0 +1,16 @@
+.venv
+venv
+__pycache__
+*.pyc
+
+.git
+.gitignore
+
+notebooks
+artifacts
+runs
+outputs
+yolo-ppe-detection
+
+archive.zip
+README.md
