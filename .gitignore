@@ -1,29 +1,28 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Virtual environments
 .venv/
 venv/
 
-# YOLO / training outputs
-runs/
-*.pt
-*.onnx
-
-# Dataset
-data/
-dataset/
-dataset_filtered/
-yolo-ppe-detection/
-*.zip
-
-# Media
-*.mp4
-*.avi
-*.mov
-
-# System
-.DS_Store
-Thumbs.db
-
 # Jupyter
 .ipynb_checkpoints/
+
+# Training data
+yolo-ppe-detection/
+archive.zip
+
+# Experiment outputs
+runs/
+outputs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/

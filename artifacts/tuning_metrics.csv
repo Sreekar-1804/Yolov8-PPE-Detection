@@ -1,0 +1,3 @@
+Model,Precision,Recall,mAP50,mAP50_95,Checkpoint,Type
+adamw_lr0005_b4,0.7181236654498351,0.5510833130810286,0.5824229135780745,0.3471671857688323,d:\Yolo\runs\targeted_tuning\adamw_lr0005_b4\weights\best.pt,Targeted fine-tune
+adamw_lr001_b4,0.6708093253394198,0.5439816240419485,0.5610781833264405,0.33177093253499956,d:\Yolo\runs\targeted_tuning\adamw_lr001_b4\weights\best.pt,Targeted fine-tune

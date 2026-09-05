@@ -1,179 +1,310 @@
 import streamlit as st
-from ultralytics import YOLO
 from PIL import Image
-import numpy as np
-import cv2
-import tempfile
-from pathlib import Path
-import av
 
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+from src.model import load_model
+from src.inference import predict_image
+from src.video import process_video
 
 
-MODEL_PATH = r"D:\Yolo\runs\detect\runs\benchmark\yolov8n\weights\best.pt"
-# Use YOLOv8n for webcam. Use heavier models for image/video only.
-
+# --------------------------------------------------
+# Page configuration
+# --------------------------------------------------
 
 st.set_page_config(
-    page_title="YOLOv8 PPE Detection",
+    page_title="Industrial PPE Detection",
     page_icon="🦺",
     layout="wide"
 )
 
 
+# --------------------------------------------------
+# Model loading
+# --------------------------------------------------
+
 @st.cache_resource
-def load_model():
-    return YOLO(MODEL_PATH)
+def get_model():
+    return load_model()
 
 
-model = load_model()
+model = get_model()
 
 
-st.sidebar.title("Settings")
+# --------------------------------------------------
+# Minimal styling
+# --------------------------------------------------
 
-confidence = st.sidebar.slider(
-    "Confidence Threshold",
-    0.10,
-    0.90,
-    0.35,
-    0.05
+st.markdown(
+    """
+    <style>
+        .block-container {
+            max-width: 1200px;
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+
+        .app-subtitle {
+            font-size: 1.05rem;
+            opacity: 0.75;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-iou = st.sidebar.slider(
-    "IoU Threshold",
-    0.10,
-    0.90,
-    0.60,
-    0.05
+
+# --------------------------------------------------
+# Header
+# --------------------------------------------------
+
+st.title("Industrial PPE Detection")
+
+st.markdown(
+    """
+    <div class="app-subtitle">
+        YOLOv8-based workplace safety monitoring for PPE compliance
+        and unsafe-condition detection.
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
-mode = st.sidebar.radio(
-    "Inference Mode",
-    ["Image", "Video", "Webcam"]
+
+# --------------------------------------------------
+# Sidebar settings
+# --------------------------------------------------
+
+with st.sidebar:
+
+    st.header("Detection Settings")
+
+    confidence = st.slider(
+        "Confidence Threshold",
+        min_value=0.10,
+        max_value=0.90,
+        value=0.25,
+        step=0.05
+    )
+
+    st.caption(
+        "Higher values reduce low-confidence detections."
+    )
+
+    st.divider()
+
+    st.subheader("Supported Classes")
+
+    st.markdown(
+        """
+        - Hardhat
+        - Safety Vest
+        - NO-Hardhat
+        - NO-Safety Vest
+        - Person
+        """
+    )
+
+
+# --------------------------------------------------
+# Project summary
+# --------------------------------------------------
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Model", "YOLOv8")
+col2.metric("PPE Classes", "5")
+col3.metric("Modes", "Image · Video · Camera")
+
+st.divider()
+
+
+# --------------------------------------------------
+# Shared result renderer
+# --------------------------------------------------
+
+def show_image_result(
+    image,
+    annotated,
+    detections,
+    inference_time
+):
+    annotated = annotated[:, :, ::-1]
+
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("Input")
+        st.image(
+            image,
+            use_container_width=True
+        )
+
+    with right:
+        st.subheader("Prediction")
+        st.image(
+            annotated,
+            use_container_width=True
+        )
+
+    st.divider()
+
+    metric1, metric2 = st.columns(2)
+
+    metric1.metric(
+        "Objects Detected",
+        len(detections)
+    )
+
+    metric2.metric(
+        "Inference Time",
+        f"{inference_time:.2f} s"
+    )
+
+    if detections:
+
+        st.subheader("Detection Summary")
+
+        st.dataframe(
+            detections,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+
+        st.warning(
+            "No detections found at the selected confidence threshold."
+        )
+
+
+# --------------------------------------------------
+# Detection modes
+# --------------------------------------------------
+
+image_tab, video_tab, camera_tab = st.tabs(
+    [
+        "Image Detection",
+        "Video Detection",
+        "Camera Detection"
+    ]
 )
 
 
-st.title("YOLOv8 PPE Detection System")
-st.write("Computer vision demo for PPE detection using YOLOv8.")
-st.markdown("---")
+# --------------------------------------------------
+# Image detection
+# --------------------------------------------------
 
+with image_tab:
 
-if mode == "Image":
+    st.subheader("Image Inspection")
+
+    st.caption(
+        "Upload a workplace image to detect PPE and safety violations."
+    )
+
     uploaded_image = st.file_uploader(
-        "Upload an image",
-        type=["jpg", "jpeg", "png"]
+        "Choose an image",
+        type=["jpg", "jpeg", "png"],
+        key="image_upload"
     )
 
-    if uploaded_image is not None:
-        image = Image.open(uploaded_image).convert("RGB")
-        image_np = np.array(image)
+    if uploaded_image:
 
-        results = model.predict(
-            source=image_np,
-            conf=confidence,
-            iou=iou,
-            verbose=False
+        image = Image.open(
+            uploaded_image
+        ).convert("RGB")
+
+        annotated, detections, inference_time = predict_image(
+            model,
+            image,
+            confidence
         )
 
-        annotated = results[0].plot()
-        annotated = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.image(image, caption="Original Image", use_container_width=True)
-
-        with col2:
-            st.image(annotated, caption="YOLOv8 Detection", use_container_width=True)
+        show_image_result(
+            image,
+            annotated,
+            detections,
+            inference_time
+        )
 
 
-elif mode == "Video":
+# --------------------------------------------------
+# Video detection
+# --------------------------------------------------
+
+with video_tab:
+
+    st.subheader("Video Inspection")
+
+    st.caption(
+        "Upload a video for frame-by-frame PPE detection."
+    )
+
     uploaded_video = st.file_uploader(
-        "Upload a video",
-        type=["mp4", "avi", "mov"]
+        "Choose a video",
+        type=["mp4", "mov", "avi"],
+        key="video_upload"
     )
 
-    if uploaded_video is not None:
-        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        temp_input.write(uploaded_video.read())
-        input_video_path = temp_input.name
+    if uploaded_video:
 
-        cap = cv2.VideoCapture(input_video_path)
+        st.video(uploaded_video)
 
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        if st.button(
+            "Run Detection",
+            type="primary"
+        ):
 
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        output_video_path = temp_output.name
+            with st.spinner(
+                "Processing video..."
+            ):
 
-        writer = cv2.VideoWriter(
-            output_video_path,
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            fps,
-            (width, height)
+                output_path = process_video(
+                    model,
+                    uploaded_video,
+                    confidence
+                )
+
+            st.success(
+                "Video processing complete."
+            )
+
+            st.video(
+                str(output_path)
+            )
+
+
+# --------------------------------------------------
+# Camera detection
+# --------------------------------------------------
+
+with camera_tab:
+
+    st.subheader("Camera Inspection")
+
+    st.caption(
+        "Capture an image directly from the browser camera."
+    )
+
+    camera_image = st.camera_input(
+        "Capture image"
+    )
+
+    if camera_image:
+
+        image = Image.open(
+            camera_image
+        ).convert("RGB")
+
+        annotated, detections, inference_time = predict_image(
+            model,
+            image,
+            confidence
         )
 
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        progress = st.progress(0)
-
-        while True:
-            ret, frame = cap.read()
-
-            if not ret:
-                break
-
-            results = model.predict(
-                source=frame,
-                conf=confidence,
-                iou=iou,
-                verbose=False
-            )
-
-            annotated_frame = results[0].plot()
-            writer.write(annotated_frame)
-
-            current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-
-            if total_frames > 0:
-                progress.progress(min(current_frame / total_frames, 1.0))
-
-        cap.release()
-        writer.release()
-
-        st.success("Video processing completed.")
-        st.video(output_video_path)
-
-
-elif mode == "Webcam":
-    st.subheader("Live Webcam Detection")
-
-    st.warning(
-        "Use YOLOv8n for webcam mode. Heavier models may be too slow for live detection."
-    )
-
-    class YOLOVideoProcessor(VideoProcessorBase):
-        def recv(self, frame):
-            image = frame.to_ndarray(format="bgr24")
-
-            results = model.predict(
-                source=image,
-                conf=confidence,
-                iou=iou,
-                imgsz=416,
-                verbose=False
-            )
-
-            annotated = results[0].plot()
-
-            return av.VideoFrame.from_ndarray(annotated, format="bgr24")
-
-    webrtc_streamer(
-        key="ppe-webcam",
-        video_processor_factory=YOLOVideoProcessor,
-        media_stream_constraints={
-            "video": True,
-            "audio": False
-        },
-        async_processing=True
-    )
+        show_image_result(
+            image,
+            annotated,
+            detections,
+            inference_time
+        )
