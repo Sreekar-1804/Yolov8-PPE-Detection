@@ -1,4 +1,4 @@
-HEAD:README.md
+
 # YOLOv8 PPE Detection
 
 ## Real-Time Personal Protective Equipment Detection System
